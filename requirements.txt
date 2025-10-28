@@ -1,7 +1,5 @@
-tempfile
+
 pandas>=2.0.0
 ydata-profiling>=4.0.0
 streamlit
 webbrowser
-io
-pathlib
