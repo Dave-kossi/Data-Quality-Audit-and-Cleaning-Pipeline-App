@@ -1,8 +1,8 @@
-# app.py – DataCleaner Pro++  (LLM edition – Streamlit-Cloud-ready)
-import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, ast, time, json
+# app.py – DataCleaner Pro++  (LLM édition complète)
+import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json
 from pathlib import Path
 
-# ---------- CONFIG ---------- #
+# ---------------- CONFIG ---------------- #
 TEMP_DIR   = Path(tempfile.gettempdir()) / "datacleaner"
 TEMP_DIR.mkdir(exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s",
@@ -10,17 +10,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 log = logging.getLogger("datacleaner")
 MAX_SIZE   = 500 * 1_000_000  # 500 Mo
 
-# ---------- LLM – OPENROUTER ---------- #
+# ---------------- LLM – OPENROUTER ---------------- #
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 LLM_MODEL      = "meta-llama/llama-3.2-3b-instruct"
 
-def ask_llama(prompt: str, max_tokens: 350) -> str:
-    """Call Llama-3.2-3B on OpenRouter (free tier)."""
+def ask_llama(prompt: str, max_tokens: 350) -> str | None:
     headers = {"Authorization": f"Bearer {st.secrets['OPENROUTER_KEY']}",
                "HTTP-Referer": "https://datacleaner-pro.streamlit.app",
                "X-Title": "DataCleaner-Pro"}
-    payload = {"model": LLM_MODEL,
-               "messages": [{"role": "user", "content": prompt}],
+    payload = {"model": LLM_MODEL, "messages": [{"role": "user", "content": prompt}],
                "max_tokens": max_tokens, "temperature": 0.2}
     try:
         r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
@@ -30,7 +28,7 @@ def ask_llama(prompt: str, max_tokens: 350) -> str:
         log.warning("LLM error: %s", e)
         return None
 
-# ---------- CORE UTILS ---------- #
+# ---------------- CORE UTILS ---------------- #
 def memory_opt(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
     before = df.memory_usage(deep=True).sum()
     df = df.copy()
@@ -104,11 +102,7 @@ def fallback_report(df: pd.DataFrame, title: str):
     with c2:
         na = df.isna().sum().to_frame("NA").query("NA > 0")
         st.write("**Valeurs manquantes**")
-        # CORRECTION ICI :
-        if not na.empty:
-            st.dataframe(na)
-        else:
-            st.write("✅ Aucune valeur manquante")
+        st.dataframe(na if not na.empty else "Aucune")
     st.write("**Aperçu**")
     st.dataframe(df.head(10))
 
@@ -117,7 +111,7 @@ def show_report(file: Path):
     html = f'<iframe src="data:text/html;base64,{b64}" width="100%" height="700" style="border:none;"></iframe>'
     st.components.v1.html(html, height=700)
 
-# ---------- STREAMIT UI ---------- #
+# ---------------- STREAMLIT UI ---------------- #
 st.set_page_config(page_title="🧽 DataCleaner Pro++  (LLM)", layout="wide")
 st.title("🧽 DataCleaner Pro++  •  LLAma-3.2 édition")
 st.markdown("Audit & nettoyage **intelligent** – hébergé sur Streamlit Cloud **gratuit**")
@@ -139,7 +133,7 @@ with st.sidebar:
         shutil.rmtree(TEMP_DIR, ignore_errors=True); TEMP_DIR.mkdir(exist_ok=True); st.success("Temp vidé")
     st.info(f"Système: {platform.system()} | Dossier: {TEMP_DIR}")
 
-# ---------- CHARGEMENT ---------- #
+# ---------------- CHARGEMENT ---------------- #
 uploaded = st.file_uploader("📂 Sélectionnez votre fichier",
                             type=["csv","xlsx","json","parquet","txt"], accept_multiple_files=False)
 if not uploaded:
@@ -193,6 +187,7 @@ if "after" not in st.session_state:
 
 bef, aft = st.session_state["before"], st.session_state["after"]
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Avant", "🧹 Nettoyage", "📈 Après + Export", "🤖 LLM"])
+
 with tab1:
     st.subheader("Rapport avant nettoyage")
     if (p := st.session_state["rep_bef"]):
@@ -200,11 +195,13 @@ with tab1:
         show_report(p)
     else:
         fallback_report(bef, "Avant")
+
 with tab2:
     st.success(f"{len(st.session_state['logs'])} transformations")
     for l in st.session_state["logs"]:
         st.write("•", l)
     st.dataframe(aft.head(10))
+
 with tab3:
     st.subheader("Rapport après nettoyage")
     if (p := st.session_state["rep_aft"]):
@@ -222,51 +219,67 @@ with tab3:
     buf.seek(0)
     st.download_button("💾 Télécharger dataset", data=buf, file_name=f"clean.{fmt}")
 
-# ---------- LLM VALUE-ADD ----------
-# ---------- CHAT AVEC L'IA ----------
+# ---------------- RECOS & CHAT INTELLIGENTS ---------------- #
 with tab4:
-    st.header("🤖 Discutez avec l’IA à propos de vos données")
+    st.header("🤖 Assistant IA – Recommandations & Chat")
 
-    # Initialiser l’historique
+    # Historique conversation
     if "chat" not in st.session_state:
         st.session_state.chat = []
 
-    # Préparer le contexte dataset (schema + 5 lignes)
-    def build_dataset_context():
-        # Schema
-        schema = aft.dtypes.astype(str).to_frame("type").assign(uniques=aft.nunique())
-        # 5 premières lignes
+    # Contexte dataset réduit
+    def build_context():
+        schema = aft.dtypes.astype(str).to_frame("type").assign(uniques=aft.nunique(), NA=aft.isna().sum())
         sample = aft.head(5).to_dict(orient="records")
-        return f"Schema des colonnes :\n{schema.to_string()}\n\n5 premières lignes :\n{json.dumps(sample, ensure_ascii=False, indent=2)}"
+        return f"Schema colonnes :\n{schema.to_string()}\n\n5 premières lignes :\n{json.dumps(sample, ensure_ascii=False, indent=2)}"
 
-    # Zone de saisie
-    user_msg = st.text_input("Votre question :", placeholder="Ex. : Quelles colonnes ont le plus d'impact ?")
+    # --- Boutons rapides ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("📊 Résumé qualité"):
+            prompt = f"{build_context()}\n\nDonne un résumé global (4 phrases) : qualité, anomalies, conseils."
+            answer = ask_llama(prompt, 350)
+            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
+    with col2:
+        if st.button("🔍 Règles de validation"):
+            col = aft.columns[0]
+            prompt = (f"Colonne '{col}' (type {aft[col].dtype}, uniques={aft[col].nunique()}, NA={aft[col].isna().sum()})\n"
+                      f"Exemples valeurs : {list(aft[col].dropna().head(5))}\n"
+                      "Propose 3 règles de validation métier (format : règle + raison).")
+            answer = ask_llama(prompt, 350)
+            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
+    with col3:
+        if st.button("💡 Recommandations métier"):
+            prompt = f"{build_context()}\n\nImagine 3 actions concrètes (métier) pour améliorer ce dataset."
+            answer = ask_llama(prompt, 350)
+            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
+
+    st.markdown("---")
+
+    # --- Chat libre ---
+    user_msg = st.text_input("💬 Posez une question libre :", placeholder="Ex. : Quelles colonnes ont le plus d'impact sur le target ?")
     if st.button("📤 Envoyer"):
         if not user_msg.strip():
             st.warning("Message vide.")
         else:
             with st.spinner("LLM réfléchit..."):
-                context = build_dataset_context()
-                prompt = f"""Tu es un assistant data-quality. Voici le contexte du dataset nettoyé :
-{context}
-
-Question de l'utilisateur : {user_msg}
-Réponse concise (3-5 phrases max) :"""
-                answer = ask_llama(prompt, max_tokens=350)
+                context = build_context()
+                prompt = (f"{context}\n\nQuestion utilisateur : {user_msg}\nRéponse concise (max 5 phrases) :")
+                answer = ask_llama(prompt, 400)
                 if not answer:
-                    answer = "Désolé, le service LLM est hors-ligne pour le moment."
-                # Ajouter à l’historique
+                    answer = "Désolé, le service LLM est hors-ligne."
                 st.session_state.chat.append(("user", user_msg))
                 st.session_state.chat.append(("bot", answer))
 
-    # Affichage conversation
+    # --- Affichage conversation ---
+    st.markdown("---")
     for author, msg in st.session_state.chat:
         if author == "user":
             st.markdown(f'<div style="text-align:right; color:#0d47a1;"><b>Moi :</b> {msg}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div style="text-align:left; color:#388e3c;"><b>IA :</b> {msg}</div>', unsafe_allow_html=True)
 
-    # Bouton Clear
+    # --- Clear chat ---
     if st.button("🗑️  Effacer la conversation"):
         st.session_state.chat = []
         st.rerun()
