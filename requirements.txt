@@ -1,7 +1,5 @@
-streamlit>=1.20.0
-pandas>=2.0.0
-numpy>=1.24.0
-openpyxl
-pyarrow
-requests>=2.28.0
-ydata-profiling>=4.0.0
+streamlit
+pandas
+numpy
+requests
+ydata-profiling
