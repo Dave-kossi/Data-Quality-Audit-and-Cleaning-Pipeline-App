@@ -102,10 +102,7 @@ def fallback_report(df: pd.DataFrame, title: str):
     with c2:
         na = df.isna().sum().to_frame("NA").query("NA > 0")
         st.write("**Valeurs manquantes**")
-        if na.empty:
-            st.write("Aucune")
-        else:
-            st.dataframe(na)
+        st.dataframe(na if not na.empty else "Aucune")
     st.write("**Aperçu**")
     st.dataframe(df.head(10))
 
