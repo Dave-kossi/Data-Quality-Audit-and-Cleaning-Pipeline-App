@@ -112,8 +112,8 @@ def show_report(file: Path):
     st.components.v1.html(html, height=700)
 
 # ---------------- STREAMLIT UI ---------------- #
-st.set_page_config(page_title="🧽 DataCleaner Pro++  (LLM)", layout="wide")
-st.title("🧽 DataCleaner Pro++  •  LLAma-3.2 édition")
+st.set_page_config(page_title="🧽 Datalyst  (LLM)", layout="wide")
+st.title("🧽 Datalyst •  LLAma-3.2 édition")
 st.markdown("Audit & nettoyage **intelligent** – hébergé sur Streamlit Cloud **gratuit**")
 
 # Sidebar
