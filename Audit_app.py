@@ -1,6 +1,7 @@
 # app.py – DataCleaner Pro++  (LLM édition complète)
-import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json
+import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv
 from pathlib import Path
+
 
 # ---------------- CONFIG ---------------- #
 TEMP_DIR   = Path(tempfile.gettempdir()) / "datacleaner"
@@ -112,9 +113,9 @@ def show_report(file: Path):
     st.components.v1.html(html, height=700)
 
 # ---------------- STREAMLIT UI ---------------- #
-st.set_page_config(page_title="🧽 Datalyst  (LLM)", layout="wide")
-st.title("🧽 Datalyst •  LLAma-3.2 édition")
-st.markdown("Audit & nettoyage **intelligent** – hébergé sur Streamlit Cloud **gratuit**")
+st.set_page_config(page_title="🧽 DataCleaner Pro++  (LLM)", layout="wide")
+st.title("🧽 DataCleaner Pro++  •  LLAma-3.2 édition")
+st.markdown("Audit & nettoyage **intelligent** ")
 
 # Sidebar
 with st.sidebar:
@@ -142,12 +143,21 @@ if uploaded.size > MAX_SIZE:
     st.error("Fichier > 500 Mo refusé"); st.stop()
 
 @st.cache_data(show_spinner=False)
+
 def load(uploaded):
     try:
         ext = Path(uploaded.name).suffix.lower()
         buffer = io.BytesIO(uploaded.getbuffer())
         match ext:
-            case ".csv"|".txt": return pd.read_csv(buffer)
+            case ".csv"|".txt": 
+                # SOLUTIONS POUR L'ERREUR DE TOKENIZATION :
+                return pd.read_csv(buffer, 
+                    encoding='utf-8',        # Gestion des caractères spéciaux
+                    on_bad_lines='skip',     # Ignorer les lignes problématiques
+                    quoting = csv.QUOTE_ALL,   # Gestion cohérente des guillemets
+                    sep=None,                # Détection automatique du séparateur
+                    engine='python'          # Parseur plus permissif
+                )
             case ".xlsx":       return pd.read_excel(buffer)
             case ".json":       return pd.read_json(buffer)
             case ".parquet":    return pd.read_parquet(buffer)
