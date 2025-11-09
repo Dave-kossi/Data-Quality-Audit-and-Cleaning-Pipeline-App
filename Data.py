@@ -144,26 +144,50 @@ if uploaded.size > MAX_SIZE:
 
 @st.cache_data(show_spinner=False)
 
+@st.cache_data(show_spinner=False)
 def load(uploaded):
     try:
         ext = Path(uploaded.name).suffix.lower()
         buffer = io.BytesIO(uploaded.getbuffer())
-        match ext:
-            case ".csv"|".txt": 
-                # SOLUTIONS POUR L'ERREUR DE TOKENIZATION :
-                return pd.read_csv(buffer, 
-                    encoding='utf-8',        # Gestion des caractères spéciaux
-                    on_bad_lines='skip',     # Ignorer les lignes problématiques
-                    quoting = csv.QUOTE_ALL,   # Gestion cohérente des guillemets
-                    sep=None,                # Détection automatique du séparateur
-                    engine='python'          # Parseur plus permissif
+
+        # --- Gestion des .csv et .txt ---
+        if ext in [".csv", ".txt"]:
+            try:
+                # 1️⃣ Tentative de lecture tabulaire
+                df = pd.read_csv(
+                    buffer,
+                    encoding="utf-8",
+                    sep=None,                # détection automatique du séparateur
+                    engine="python",
+                    quoting=csv.QUOTE_MINIMAL,
+                    on_bad_lines="skip"
                 )
-            case ".xlsx":       return pd.read_excel(buffer)
-            case ".json":       return pd.read_json(buffer)
-            case ".parquet":    return pd.read_parquet(buffer)
+                return df
+            except Exception:
+                # 2️⃣ Tentative JSON Lines (si le txt contient du JSON)
+                buffer.seek(0)
+                try:
+                    df = pd.read_json(buffer, lines=True)
+                    return df
+                except Exception:
+                    # 3️⃣ Lecture texte brut → DataFrame à une colonne
+                    buffer.seek(0)
+                    content = buffer.read().decode("utf-8", errors="ignore")
+                    return pd.DataFrame({"texte": [content]})
+
+        # --- Autres formats classiques ---
+        elif ext == ".xlsx":
+            return pd.read_excel(buffer)
+        elif ext == ".json":
+            return pd.read_json(buffer)
+        elif ext == ".parquet":
+            return pd.read_parquet(buffer)
+
     except Exception as e:
-        log.exception("load"); st.error(str(e))
+        log.exception("Erreur de chargement du fichier")
+        st.error(str(e))
     return None
+
 
 df_raw = load(uploaded)
 if df_raw is None:
