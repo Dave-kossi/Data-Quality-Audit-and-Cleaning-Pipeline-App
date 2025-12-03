@@ -1,15 +1,15 @@
-# app.py – DataCleaner Pro++  (LLM édition complète)
+# app.py – DataCleaner Pro++ (LLM édition complète)
 import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv
 from pathlib import Path
 
 
 # ---------------- CONFIG ---------------- #
-TEMP_DIR   = Path(tempfile.gettempdir()) / "datacleaner"
+TEMP_DIR    = Path(tempfile.gettempdir()) / "datacleaner"
 TEMP_DIR.mkdir(exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s",
-                    handlers=[logging.FileHandler(TEMP_DIR / "app.log"), logging.StreamHandler(sys.stdout)])
+                     handlers=[logging.FileHandler(TEMP_DIR / "app.log"), logging.StreamHandler(sys.stdout)])
 log = logging.getLogger("datacleaner")
-MAX_SIZE   = 500 * 1_000_000  # 500 Mo
+MAX_SIZE    = 500 * 1_000_000  # 500 Mo
 
 # ---------------- LLM – OPENROUTER ---------------- #
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -48,16 +48,33 @@ def memory_opt(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
 
 def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
     logs, df = [], df.copy()
+    
+    # 1. Suppression des doublons
     if params["drop_dup"]:
         prev = len(df)
         df = df.drop_duplicates()
         if (d := prev - len(df)):
-            logs.append(f"🗑️  {d} doublons supprimés")
+            logs.append(f"🗑️ {d} doublons supprimés")
+            
+    # 2. Normalisation des noms de colonnes
     if params["norm_cols"]:
         old = df.columns.tolist()
         df.columns = df.columns.str.strip().str.lower().str.replace(r"\W+", "_", regex=True)
         if old != df.columns.tolist():
             logs.append("🔠 noms normalisés")
+            
+    # 3. Nettoyage du texte/catégories (NOUVEAU)
+    if params["text_clean"]:
+        for c in df.columns:
+            if df[c].dtype == "object" or pd.api.types.is_categorical_dtype(df[c]):
+                # Conversion en chaîne, suppression des espaces, mise en minuscule (pour uniformité)
+                df[c] = df[c].astype(str).str.strip().str.lower()
+                # Re-categorisation si le type était catégoriel
+                if pd.api.types.is_categorical_dtype(df[c]):
+                    df[c] = df[c].astype("category")
+        logs.append(f"✍️ Nettoyage du texte (strip, minuscule) appliqué")
+
+    # 4. Conversion automatique des types
     if params["auto_type"]:
         th = params["na_thresh"] / 100
         for c in df.columns:
@@ -70,6 +87,8 @@ def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
                 if dat.notna().mean() >= th:
                     df[c] = dat; logs.append(f"📅 {c} → date")
             except: pass
+            
+    # 5. Gestion des NA
     if params["handle_na"]:
         for c in df.columns:
             if df[c].isna().sum() == 0: continue
@@ -80,22 +99,68 @@ def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
             else:
                 df[c] = df[c].fillna(params["na_fill"])
                 logs.append(f"📝 {c} NA → '{params['na_fill']}'")
+                
+    # 6. Plafonnement des Outliers (MISE À JOUR)
+    iqr_coeff = params["iqr_coeff"]
+    if iqr_coeff > 0: # Le slider est > 0 si l'utilisateur veut appliquer le capping
+        for c in df.columns:
+            if pd.api.types.is_numeric_dtype(df[c]):
+                Q1 = df[c].quantile(0.25)
+                Q3 = df[c].quantile(0.75)
+                IQR = Q3 - Q1
+                
+                # Utiliser le coefficient choisi par l'utilisateur
+                lower_bound = Q1 - iqr_coeff * IQR
+                upper_bound = Q3 + iqr_coeff * IQR
+                
+                # Appliquer le capping
+                df[c] = df[c].clip(lower_bound, upper_bound)
+                logs.append(f"📈 {c} valeurs aberrantes plafonnées (coeff {iqr_coeff:.1f} IQR)")
+                
+    # 7. Suppression des colonnes à faible variance
+    if params["drop_low_var"]:
+        cols_to_drop = []
+        for c in df.columns:
+            if df[c].nunique() <= 1:
+                # Colonnes avec 0 ou 1 valeur unique
+                cols_to_drop.append(c)
+                logs.append(f"🗑️ {c} supprimé (unique <= 1)")
+            elif df[c].dtype == "object" or pd.api.types.is_categorical_dtype(df[c]):
+                # Colonnes textuelles presque constantes (>99% même valeur)
+                if not df[c].empty:
+                    most_freq_ratio = df[c].value_counts(normalize=True).iloc[0]
+                    if most_freq_ratio > 0.99: 
+                        cols_to_drop.append(c)
+                        logs.append(f"🗑️ {c} supprimé (texte >99% constant)")
+            
+        df = df.drop(columns=cols_to_drop, errors='ignore')
+
+    # 8. Optimisation de la mémoire (toujours en dernier)
     df, gain = memory_opt(df)
     if gain > 5:
         logs.append(f"💾 mémoire -{gain:.1f}%")
+        
     return df, logs
 
 def build_report(df: pd.DataFrame, title: str, minimal: bool) -> Path | None:
+    """Tente de générer le rapport ydata-profiling ou retourne None si échec."""
     try:
+        # Importation dynamique pour éviter le plantage si la dépendance n'est pas là.
         from ydata_profiling import ProfileReport
         file = TEMP_DIR / f"report_{title.replace(' ','_')}_{uuid.uuid4().hex}.html"
         ProfileReport(df, title=title, minimal=minimal).to_file(str(file))
         return file
     except Exception as e:
-        log.warning("ydata fail: %s", e); return None
+        # Log l'erreur (probablement ModuleNotFoundError si ydata-profiling est manquante)
+        log.warning("ydata fail: %s. Utilisation du rapport de secours.", e)
+        return None
 
 def fallback_report(df: pd.DataFrame, title: str):
     st.subheader(f"📋 Rapport basique – {title}")
+    
+    # Ajout d'une alerte visible si le rapport complet manque
+    st.warning("Rapport complet manquant. Assurez-vous que 'ydata-profiling' est installé (via requirements.txt) et que la génération n'a pas échoué.")
+    
     c1, c2 = st.columns(2)
     with c1:
         st.write("**Types & uniques**")
@@ -113,8 +178,8 @@ def show_report(file: Path):
     st.components.v1.html(html, height=700)
 
 # ---------------- STREAMLIT UI ---------------- #
-st.set_page_config(page_title="🧽 DataCleaner Pro++  (LLM)", layout="wide")
-st.title("🧽 DataCleaner Pro++  •  LLAma-3.2 édition")
+st.set_page_config(page_title="🧽 DataCleaner Pro++ (LLM)", layout="wide")
+st.title("🧽 DataCleaner Pro++ • LLAma-3.2 édition")
 st.markdown("Audit & nettoyage **intelligent** ")
 
 # Sidebar
@@ -124,13 +189,16 @@ with st.sidebar:
         "drop_dup":  st.checkbox("Supprimer doublons", True),
         "norm_cols": st.checkbox("Normaliser colonnes", True),
         "auto_type": st.checkbox("Conversion auto types", True),
+        "text_clean": st.checkbox("Nettoyage Texte (strip, minuscule)", True),
+        "iqr_coeff": st.slider("Coefficient IQR (Outliers)", 0.0, 3.0, 1.5, 0.1), # Changement de checkbox à slider
+        "drop_low_var": st.checkbox("Supprimer colonnes à faible variance", False),
         "handle_na": st.checkbox("Gérer NA", True),
         "na_thresh": st.slider("Taux min valeurs valides (%)", 50, 90, 70),
         "na_strat":  st.selectbox("Stratégie NA num", ["median", "mode"]),
         "na_fill":   st.text_input("Valeur remplacement NA texte", "_MISSING_"),
         "minimal":   st.checkbox("Mode ydata minimal (rapide)", True),
     }
-    if st.button("🗑️  vider fichiers temp"):
+    if st.button("🗑️ vider fichiers temp"):
         shutil.rmtree(TEMP_DIR, ignore_errors=True); TEMP_DIR.mkdir(exist_ok=True); st.success("Temp vidé")
     st.info(f"Système: {platform.system()} | Dossier: {TEMP_DIR}")
 
@@ -141,8 +209,6 @@ if not uploaded:
     st.stop()
 if uploaded.size > MAX_SIZE:
     st.error("Fichier > 500 Mo refusé"); st.stop()
-
-@st.cache_data(show_spinner=False)
 
 @st.cache_data(show_spinner=False)
 def load(uploaded):
@@ -157,7 +223,7 @@ def load(uploaded):
                 df = pd.read_csv(
                     buffer,
                     encoding="utf-8",
-                    sep=None,                # détection automatique du séparateur
+                    sep=None,              # détection automatique du séparateur
                     engine="python",
                     quoting=csv.QUOTE_MINIMAL,
                     on_bad_lines="skip"
@@ -213,7 +279,7 @@ if st.button("🚀 Lancer l’analyse complète", type="primary"):
     st.session_state["after"]  = df_clean
     st.session_state["rep_bef"] = report_before
     st.session_state["rep_aft"] = report_after
-    st.session_state["logs"]   = logs
+    st.session_state["logs"]    = logs
     st.rerun()
 
 if "after" not in st.session_state:
@@ -246,10 +312,10 @@ with tab3:
     fmt = st.selectbox("Exporter dataset nettoyé", ["csv", "xlsx", "json", "parquet"])
     buf = io.BytesIO()
     match fmt:
-        case "csv":     aft.to_csv(buf, index=False)
-        case "xlsx":    aft.to_excel(buf, index=False)
-        case "json":    buf.write(aft.to_json(orient="records", indent=2).encode())
-        case "parquet": aft.to_parquet(buf)
+        case "csv":      aft.to_csv(buf, index=False)
+        case "xlsx":     aft.to_excel(buf, index=False)
+        case "json":     buf.write(aft.to_json(orient="records", indent=2).encode())
+        case "parquet":  aft.to_parquet(buf)
     buf.seek(0)
     st.download_button("💾 Télécharger dataset", data=buf, file_name=f"clean.{fmt}")
 
@@ -265,7 +331,24 @@ with tab4:
     def build_context():
         schema = aft.dtypes.astype(str).to_frame("type").assign(uniques=aft.nunique(), NA=aft.isna().sum())
         sample = aft.head(5).to_dict(orient="records")
-        return f"Schema colonnes :\n{schema.to_string()}\n\n5 premières lignes :\n{json.dumps(sample, ensure_ascii=False, indent=2)}"
+        
+        # --- NOUVEAU: Statistiques Clés pour Colonnes Numériques ---
+        numeric_cols = aft.select_dtypes(include=np.number).columns
+        key_stats = {}
+        if not numeric_cols.empty:
+            stats_df = aft[numeric_cols].agg(['min', 'max', 'mean', 'std']).T
+            # Arrondir pour un contexte plus propre
+            stats_df = stats_df.apply(lambda x: round(x, 2))
+            key_stats = stats_df.to_dict(orient='index')
+        # --- FIN NOUVEAU ---
+
+        context = f"Schema colonnes :\n{schema.to_string()}\n"
+        
+        if key_stats:
+             context += f"\nStatistiques Clés (Numériques) :\n{json.dumps(key_stats, indent=2, ensure_ascii=False)}\n"
+             
+        context += f"\n5 premières lignes :\n{json.dumps(sample, ensure_ascii=False, indent=2)}"
+        return context
 
     # --- Boutons rapides ---
     col1, col2, col3 = st.columns(3)
@@ -277,9 +360,8 @@ with tab4:
     with col2:
         if st.button("🔍 Règles de validation"):
             col = aft.columns[0]
-            prompt = (f"Colonne '{col}' (type {aft[col].dtype}, uniques={aft[col].nunique()}, NA={aft[col].isna().sum()})\n"
-                      f"Exemples valeurs : {list(aft[col].dropna().head(5))}\n"
-                      "Propose 3 règles de validation métier (format : règle + raison).")
+            prompt = (f"{build_context()}\n"
+                      f"En te basant sur le contexte ci-dessus, propose 3 règles de validation métier pour la colonne '{col}' (format : règle + raison).")
             answer = ask_llama(prompt, 350)
             st.session_state.chat.append(("bot", answer or "Hors-ligne."))
     with col3:
@@ -314,6 +396,6 @@ with tab4:
             st.markdown(f'<div style="text-align:left; color:#388e3c;"><b>IA :</b> {msg}</div>', unsafe_allow_html=True)
 
     # --- Clear chat ---
-    if st.button("🗑️  Effacer la conversation"):
+    if st.button("🗑️ Effacer la conversation"):
         st.session_state.chat = []
         st.rerun()
