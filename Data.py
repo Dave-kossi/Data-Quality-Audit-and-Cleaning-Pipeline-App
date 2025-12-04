@@ -103,8 +103,12 @@ def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
     # 6. Plafonnement des Outliers (MISE À JOUR)
     iqr_coeff = params["iqr_coeff"]
     if iqr_coeff > 0: # Le slider est > 0 si l'utilisateur veut appliquer le capping
-        for c in df.columns:
-            if pd.api.types.is_numeric_dtype(df[c]):
+        # FIX: Utilisation de select_dtypes pour garantir que nous traitons uniquement les types numériques purs.
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        
+        for c in numeric_cols:
+            # S'assurer qu'il y a plus d'une valeur unique pour le calcul de quantile (pour éviter IQR=0)
+            if df[c].nunique() > 1:
                 Q1 = df[c].quantile(0.25)
                 Q3 = df[c].quantile(0.75)
                 IQR = Q3 - Q1
@@ -178,9 +182,12 @@ def show_report(file: Path):
     st.components.v1.html(html, height=700)
 
 # ---------------- STREAMLIT UI ---------------- #
-st.set_page_config(page_title="🧽 DataCleaner Pro++ (LLM)", layout="wide")
-st.title("🧽 DataCleaner Pro++ • LLAma-3.2 édition")
+# CHANGEMENT 1: Nom de la page (Utilisation de Axiom AI)
+st.set_page_config(page_title="Axiom", layout="wide")
+# CHANGEMENT 2: Titre principal (Utilisation de Axiom AI)
+st.title("✨ Axiom • Data Quality & Audit")
 st.markdown("Audit & nettoyage **intelligent** ")
+st.divider() # AJOUT 1: Séparateur visuel après le titre pour plus de clarté
 
 # Sidebar
 with st.sidebar:
@@ -206,6 +213,7 @@ with st.sidebar:
 uploaded = st.file_uploader("📂 Sélectionnez votre fichier",
                             type=["csv","xlsx","json","parquet","txt"], accept_multiple_files=False)
 if not uploaded:
+    st.info("⬆️ Chargez un fichier pour commencer l'analyse de qualité des données.", icon="💡") # AJOUT 2: Message d'attente pro
     st.stop()
 if uploaded.size > MAX_SIZE:
     st.error("Fichier > 500 Mo refusé"); st.stop()
@@ -260,11 +268,24 @@ if df_raw is None:
     st.stop()
 
 df_opt, gain = memory_opt(df_raw)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Lignes", f"{len(df_raw):,}")
-c2.metric("Colonnes", len(df_raw.columns))
-c3.metric("NA", df_raw.isna().sum().sum())
-c4.metric("Mémoire gagnée", f"{gain:.1f}%")
+
+# DEBUT AMELIORATION VISUELLE: Aperçu des métriques clés
+st.subheader(" Aperçu du Dataset Brut")
+st.markdown("Les métriques ci-dessous sont calculées sur le fichier brut avant nettoyage.")
+st.divider()
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Lignes", f"{len(df_raw):,}")
+col2.metric("Total Colonnes", len(df_raw.columns))
+# Utilisation de Delta pour montrer l'impact des NA
+total_cells = len(df_raw) * len(df_raw.columns)
+na_count = df_raw.isna().sum().sum()
+na_percentage = na_count * 100 / total_cells if total_cells > 0 else 0
+
+col3.metric("NA", na_count, f"{na_percentage:.2f}% des cellules", delta_color="inverse")
+col4.metric("Optimisation RAM", f"{gain:.1f}%", "Réduction potentielle", delta_color="normal")
+st.divider()
+# FIN AMELIORATION VISUELLE
 
 if st.button("🚀 Lancer l’analyse complète", type="primary"):
     bar = st.progress(0)
@@ -286,7 +307,7 @@ if "after" not in st.session_state:
     st.stop()
 
 bef, aft = st.session_state["before"], st.session_state["after"]
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Avant", "🧹 Nettoyage", "📈 Après + Export", "🤖 LLM"])
+tab1, tab2, tab3, tab4 = st.tabs(["Rapport Avant nettoyage", "🧹 Nettoyage", "📈 Rapport Après nettoyage + Export", "🤖 LLM"])
 
 with tab1:
     st.subheader("Rapport avant nettoyage")
@@ -353,7 +374,7 @@ with tab4:
     # --- Boutons rapides ---
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("📊 Résumé qualité"):
+        if st.button("Résumé qualité"):
             prompt = f"{build_context()}\n\nDonne un résumé global (4 phrases) : qualité, anomalies, conseils."
             answer = ask_llama(prompt, 350)
             st.session_state.chat.append(("bot", answer or "Hors-ligne."))
