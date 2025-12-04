@@ -103,8 +103,12 @@ def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
     # 6. Plafonnement des Outliers (MISE À JOUR)
     iqr_coeff = params["iqr_coeff"]
     if iqr_coeff > 0: # Le slider est > 0 si l'utilisateur veut appliquer le capping
-        for c in df.columns:
-            if pd.api.types.is_numeric_dtype(df[c]):
+        # FIX: Utilisation de select_dtypes pour garantir que nous traitons uniquement les types numériques purs.
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        
+        for c in numeric_cols:
+            # S'assurer qu'il y a plus d'une valeur unique pour le calcul de quantile (pour éviter IQR=0)
+            if df[c].nunique() > 1:
                 Q1 = df[c].quantile(0.25)
                 Q3 = df[c].quantile(0.75)
                 IQR = Q3 - Q1
@@ -178,7 +182,9 @@ def show_report(file: Path):
     st.components.v1.html(html, height=700)
 
 # ---------------- STREAMLIT UI ---------------- #
+# CHANGEMENT 1: Nom de la page (Utilisation de Axiom AI)
 st.set_page_config(page_title="Axiom", layout="wide")
+# CHANGEMENT 2: Titre principal (Utilisation de Axiom AI)
 st.title("✨ Axiom • Data Quality & Audit")
 st.markdown("Audit & nettoyage **intelligent** ")
 st.divider() # AJOUT 1: Séparateur visuel après le titre pour plus de clarté
@@ -264,7 +270,7 @@ if df_raw is None:
 df_opt, gain = memory_opt(df_raw)
 
 # DEBUT AMELIORATION VISUELLE: Aperçu des métriques clés
-st.subheader("Aperçu du Dataset Brut")
+st.subheader(" Aperçu du Dataset Brut")
 st.markdown("Les métriques ci-dessous sont calculées sur le fichier brut avant nettoyage.")
 st.divider()
 
@@ -301,7 +307,7 @@ if "after" not in st.session_state:
     st.stop()
 
 bef, aft = st.session_state["before"], st.session_state["after"]
-tab1, tab2, tab3, tab4 = st.tabs(["Avant", "🧹 Nettoyage", "📈 Après + Export", "🤖 LLM"])
+tab1, tab2, tab3, tab4 = st.tabs(["Rapport Avant nettoyage", "🧹 Nettoyage", "📈 Rapport Après nettoyage + Export", "🤖 LLM"])
 
 with tab1:
     st.subheader("Rapport avant nettoyage")
