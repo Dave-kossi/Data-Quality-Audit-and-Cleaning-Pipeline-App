@@ -6,10 +6,10 @@ Automated Data Cleaning • Profiling • Optimization • LLM Analysis
 ---
 Axiom est une application intelligente d’audit et de nettoyage de données construite avec Streamlit, intégrant un LLM via OpenRouter.
 Elle permet :
-✔ d’explorer, nettoyer et optimiser un dataset
-✔ de générer un rapport automatique avant/après
-✔ de discuter avec une IA qui analyse les données
-✔ d’exporter le dataset optimisé dans plusieurs formats
+- d’explorer, nettoyer et optimiser un dataset
+- de générer un rapport automatique avant/après
+- de discuter avec une IA qui analyse les données
+- d’exporter le dataset optimisé dans plusieurs formats
 Axiom combine Data Engineering, Data Quality, Analyse Assistée par IA et profiling professionnel dans une interface simple et puissante.
 --- 
 
