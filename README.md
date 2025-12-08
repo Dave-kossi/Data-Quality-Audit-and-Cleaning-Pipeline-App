@@ -14,14 +14,35 @@ Axiom combine Data Engineering, Data Quality, Analyse Assistée par IA et profil
 --- 
 
 ---
-  ## Fonctionnalités
-🔍 1. Chargement intelligent
+## 🔥 Fonctionnalités
 
-Support : CSV, XLSX, JSON, Parquet, TXT
+### 🔍 1. Chargement intelligent
+- Support : **CSV**, **XLSX**, **JSON**, **Parquet**, **TXT**
+- Détection automatique des séparateurs
+- Lecture intelligente **JSON / JSON Lines**
+- Prévisualisation immédiate
 
-Détection automatique des séparateurs
+### 🧹 2. Nettoyage automatique
+- Suppression des doublons
+- Normalisation des colonnes
+- Conversion des types (dates, numériques…)
+- Gestion intelligente des valeurs manquantes
+- Nettoyage texte (trim, lower, accents)
+- Détection et correction des outliers (**IQR**)
+- Suppression des colonnes à variance nulle
 
-Lecture intelligente JSON/JSON Lines
+### ⚡ 3. Optimisation mémoire
+- Downcast automatique (int/float)
+- Conversion en **category**
+- Rapport clair avant/après optimisation et nettoyage 
 
-Prévisualisation immédiate
----
+### 📊 4. Profiling complet
+- Compatible **ydata-profiling**
+- Export des rapports en HTML intégré
+
+### 🤖 5. Analyse IA contextuelle
+- Résumé automatique du dataset
+- Détection d’anomalies, suggestions, règles métier
+- Chat IA avec informations dynamiques :
+  - cette partie permet a l`utilisateur de mieux comprendre son dataset 
+
