@@ -44,5 +44,5 @@ Axiom combine Data Engineering, Data Quality, Analyse Assistée par IA et profil
 - Résumé automatique du dataset
 - Détection d’anomalies, suggestions, règles métier
 - Chat IA avec informations dynamiques :
-  - cette partie permet a l`utilisateur de mieux comprendre son dataset 
+  - cette partie permet a l`utilisateur de mieux comprendre son dataset. 
 
