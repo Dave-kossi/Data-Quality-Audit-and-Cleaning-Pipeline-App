@@ -81,11 +81,11 @@ def clean_df(df: pd.DataFrame, params: dict) -> tuple[pd.DataFrame, list[str]]:
             if df[c].dtype != "object": continue
             num = pd.to_numeric(df[c], errors="coerce")
             if num.notna().mean() >= th:
-                df[c] = num; logs.append(f"🔢 {c} → num"); continue
+                df[c] = num; logs.append(f"{c} → num"); continue
             try:
                 dat = pd.to_datetime(df[c], errors="coerce", dayfirst=True)
                 if dat.notna().mean() >= th:
-                    df[c] = dat; logs.append(f"📅 {c} → date")
+                    df[c] = dat; logs.append(f"{c} → date")
             except: pass
             
     # 5. Gestion des NA
@@ -213,7 +213,7 @@ with st.sidebar:
 uploaded = st.file_uploader("📂 Sélectionnez votre fichier",
                             type=["csv","xlsx","json","parquet","txt"], accept_multiple_files=False)
 if not uploaded:
-    st.info("⬆️ Chargez un fichier pour commencer l'analyse de qualité des données.", icon="💡") # AJOUT 2: Message d'attente pro
+    st.info("Chargez un fichier pour commencer l'analyse de qualité des données.", icon="💡") # AJOUT 2: Message d'attente pro
     st.stop()
 if uploaded.size > MAX_SIZE:
     st.error("Fichier > 500 Mo refusé"); st.stop()
@@ -307,7 +307,7 @@ if "after" not in st.session_state:
     st.stop()
 
 bef, aft = st.session_state["before"], st.session_state["after"]
-tab1, tab2, tab3, tab4 = st.tabs(["Rapport Avant nettoyage", "🧹 Nettoyage", "📈 Rapport Après nettoyage + Export", "🤖 LLM"])
+tab1, tab2, tab3, tab4 = st.tabs(["Rapport Avant nettoyage", "🧹 Nettoyage", "📈 Rapport Après nettoyage + Export", "🤖 Assistant IA"])
 
 with tab1:
     st.subheader("Rapport avant nettoyage")
