@@ -227,7 +227,7 @@ def load(uploaded):
         # --- Gestion des .csv et .txt ---
         if ext in [".csv", ".txt"]:
             try:
-                # 1️⃣ Tentative de lecture tabulaire
+                # 1️ Tentative de lecture tabulaire
                 df = pd.read_csv(
                     buffer,
                     encoding="utf-8",
@@ -238,13 +238,13 @@ def load(uploaded):
                 )
                 return df
             except Exception:
-                # 2️⃣ Tentative JSON Lines (si le txt contient du JSON)
+                # 2️Tentative JSON Lines (si le txt contient du JSON)
                 buffer.seek(0)
                 try:
                     df = pd.read_json(buffer, lines=True)
                     return df
                 except Exception:
-                    # 3️⃣ Lecture texte brut → DataFrame à une colonne
+                    # 3️Lecture texte brut → DataFrame à une colonne
                     buffer.seek(0)
                     content = buffer.read().decode("utf-8", errors="ignore")
                     return pd.DataFrame({"texte": [content]})
@@ -287,7 +287,7 @@ col4.metric("Optimisation RAM", f"{gain:.1f}%", "Réduction potentielle", delta_
 st.divider()
 # FIN AMELIORATION VISUELLE
 
-if st.button("🚀 Lancer l’analyse complète", type="primary"):
+if st.button(" Lancer l’analyse complète", type="primary"):
     bar = st.progress(0)
     bar.progress(10)
     report_before = build_report(df_opt, "Avant", params["minimal"])
@@ -394,7 +394,7 @@ with tab4:
     st.markdown("---")
 
     # --- Chat libre ---
-    user_msg = st.text_input("💬 Posez une question libre :", placeholder="Ex. : Quelles colonnes ont le plus d'impact sur le target ?")
+    user_msg = st.text_input("💬 Posez une question sur votre dataset:", placeholder="Ex. : Quelles colonnes ont le plus d'impact sur le target ?")
     if st.button("📤 Envoyer"):
         if not user_msg.strip():
             st.warning("Message vide.")
