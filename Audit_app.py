@@ -449,7 +449,7 @@ def load(uploaded):
         # --- Gestion des .csv et .txt ---
         if ext in [".csv", ".txt"]:
             try:
-                # 1️ Tentative de lecture tabulaire
+                # 1. Tentative de lecture tabulaire
                 df = pd.read_csv(
                     buffer,
                     encoding="utf-8",
@@ -460,37 +460,38 @@ def load(uploaded):
                 )
                 return df
             except Exception:
-                # 2️Tentative JSON Lines (si le txt contient du JSON)
+                # 2. Tentative JSON Lines (si le txt contient du JSON)
                 buffer.seek(0)
                 try:
                     df = pd.read_json(buffer, lines=True)
                     return df
-             except Exception:
-                    # 3️Lecture texte brut → DataFrame à une colonne
+                except Exception:
+                    # 3. Lecture texte brut → DataFrame à une colonne
                     buffer.seek(0)
                     content = buffer.read().decode("utf-8", errors="ignore")
                     return pd.DataFrame({"texte": [content]})
 
-        # --- Autres formats classiques ---
-       # --- Autres formats classiques ---
-# Correction ici : on vérifie si l'extension est dans une liste autorisée
-            elif ext in [".xlsx", ".xls"]:
-              try:
-        # Note: xlrd est nécessaire pour les fichiers .xls
-               return pd.read_excel(buffer)
-              except Exception as e:
-            log.error(f"Erreur lors de la lecture Excel: {e}")
-        # Tentative de secours si le moteur par défaut échoue
-            return pd.read_excel(buffer, engine='openpyxl' if ext == ".xlsx" else 'xlrd')
+        # --- Autres formats classiques (alignés sur le premier IF) ---
+        elif ext in [".xlsx", ".xls"]:
+            try:
+                # Note: xlrd est nécessaire pour les fichiers .xls
+                return pd.read_excel(buffer)
+            except Exception as e:
+                log.error(f"Erreur lors de la lecture Excel: {e}")
+                # Tentative de secours si le moteur par défaut échoue
+                buffer.seek(0)
+                return pd.read_excel(buffer, engine='openpyxl' if ext == ".xlsx" else 'xlrd')
 
-            elif ext == ".json":
+        elif ext == ".json":
             return pd.read_json(buffer)
+
         elif ext == ".parquet":
             return pd.read_parquet(buffer)
 
     except Exception as e:
         log.exception("Erreur de chargement du fichier")
         st.error(str(e))
+        
     return None
 
 
