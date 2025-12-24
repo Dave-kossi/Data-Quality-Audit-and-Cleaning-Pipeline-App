@@ -1,4 +1,4 @@
-# app.py – DataCleaner Pro++ (LLM édition complète)
+# packages importation
 import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv
 from pathlib import Path
 
@@ -15,20 +15,241 @@ MAX_SIZE    = 500 * 1_000_000  # 500 Mo
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 LLM_MODEL      = "meta-llama/llama-3.2-3b-instruct"
 
-def ask_llama(prompt: str, max_tokens: 350) -> str | None:
-    headers = {"Authorization": f"Bearer {st.secrets['OPENROUTER_KEY']}",
-               "HTTP-Referer": "https://datacleaner-pro.streamlit.app",
-               "X-Title": "DataCleaner-Pro"}
-    payload = {"model": LLM_MODEL, "messages": [{"role": "user", "content": prompt}],
-               "max_tokens": max_tokens, "temperature": 0.2}
-    try:
-        r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=30)
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        log.warning("LLM error: %s", e)
-        return None
+# Remplacer votre fonction ask_llama existante par :
 
+def ask_llama(prompt: str, max_tokens: int = 350, temperature: float = 0.2, 
+              profile: dict = None) -> str | None:
+    """Fonction LLM améliorée avec adaptation contextuelle"""
+    
+    headers = {
+        "Authorization": f"Bearer {st.secrets['OPENROUTER_KEY']}",
+        "HTTP-Referer": "https://datacleaner-pro.streamlit.app",
+        "X-Title": "DataCleaner-Pro"
+    }
+    
+    # System prompt adaptatif basé sur le profil
+    if profile:
+        if profile["type"] == "numerical":
+            system_msg = """Tu es un Data Scientist expert en analyse numérique. 
+            Tu réponds de manière technique mais accessible. Utilise des concepts statistiques.
+            Sois précis avec les chiffres."""
+        elif profile["type"] == "categorical":
+            system_msg = """Tu es un expert en analyse catégorielle.
+            Concentre-toi sur les fréquences, proportions et relations entre catégories.
+            Propose des encodages adaptés."""
+        elif profile["type"] == "temporal":
+            system_msg = """Tu es un expert en séries temporelles.
+            Analyse les tendances, saisonnalités et patterns temporels.
+            Suggère des métriques temporelles pertinentes."""
+        else:
+            system_msg = """Tu es un expert en data quality et nettoyage de données.
+            Tu réponds de manière concise, technique et factuelle."""
+    else:
+        system_msg = """Tu es un assistant expert en data quality et nettoyage de données.
+        Réponds de manière concise et précise."""
+    
+    payload = {
+        "model": LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "top_p": 0.1,
+        "frequency_penalty": 0.1
+    }
+    
+    try:
+        r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=45)
+        r.raise_for_status()
+        response = r.json()
+        
+        if "choices" not in response or len(response["choices"]) == 0:
+            log.error("Réponse LLM vide")
+            return "Erreur: réponse vide de l'IA."
+            
+        content = response["choices"][0]["message"]["content"].strip()
+        
+        if len(content.split()) < 3:
+            log.warning("Réponse LLM trop courte")
+            return "L'IA n'a pas pu générer une réponse utile."
+            
+        return content
+        
+    except requests.exceptions.Timeout:
+        log.error("Timeout LLM après 45s")
+        return "Délai dépassé. L'IA met trop de temps à répondre."
+    except requests.exceptions.RequestException as e:
+        log.error("Erreur réseau LLM: %s", e)
+        return "Erreur de connexion à l'IA. Vérifiez votre clé API."
+    except Exception as e:
+        log.error("Erreur LLM inattendue: %s", e)
+        return f"Erreur technique: {str(e)[:100]}"
+
+# Analyse intelligente du dataset
+
+def analyze_dataset_profile(df: pd.DataFrame) -> dict:
+    """Analyse intelligente pour déterminer le type de dataset"""
+    
+    profile = {
+        "type": "unknown",
+        "characteristics": [],
+        "suggested_questions": [],
+        "domain_hints": [],
+        "quality_score": 0
+    }
+    
+    # 1. Détection du type de dataset
+    num_cols = len(df.select_dtypes(include=np.number).columns)
+    cat_cols = len(df.select_dtypes(include=['object', 'category']).columns)
+    date_cols = len(df.select_dtypes(include=['datetime']).columns)
+    total_cols = len(df.columns)
+    
+    if num_cols / total_cols > 0.7:
+        profile["type"] = "numerical"
+        profile["characteristics"].append("Données principalement numériques")
+    elif cat_cols / total_cols > 0.7:
+        profile["type"] = "categorical"
+        profile["characteristics"].append("Données principalement catégorielles")
+    elif date_cols > 0:
+        profile["type"] = "temporal"
+        profile["characteristics"].append("Données temporelles présentes")
+    
+    # 2. Détection de domaine potentiel
+    column_names = [col.lower() for col in df.columns]
+    
+    financial_indicators = ['price', 'cost', 'revenue', 'profit', 'salary', 'amount']
+    customer_indicators = ['customer', 'client', 'user', 'email', 'phone', 'address']
+    product_indicators = ['product', 'sku', 'item', 'category', 'brand']
+    temporal_indicators = ['date', 'time', 'year', 'month', 'day', 'hour']
+    health_indicators = ['patient', 'diagnosis', 'treatment', 'hospital', 'medical']
+    
+    indicators = [
+        (financial_indicators, "financier"),
+        (customer_indicators, "client/CRM"),
+        (product_indicators, "produit/inventaire"),
+        (temporal_indicators, "temporel/série chronologique"),
+        (health_indicators, "médical/santé")
+    ]
+    
+    for indicator_list, domain in indicators:
+        if any(indicator in ' '.join(column_names) for indicator in indicator_list):
+            profile["domain_hints"].append(domain)
+    
+    # 3. Score de qualité
+    quality_metrics = 0
+    total_metrics = 4
+    
+    # Métrique 1: Taux de valeurs manquantes
+    na_percentage = df.isna().sum().sum() / (len(df) * len(df.columns))
+    if na_percentage < 0.1:
+        quality_metrics += 1
+        profile["characteristics"].append(f"Peu de valeurs manquantes ({na_percentage:.1%})")
+    else:
+        profile["characteristics"].append(f"Valeurs manquantes élevées ({na_percentage:.1%})")
+    
+    # Métrique 2: Cohérence des types
+    type_consistency = df.apply(lambda x: x.map(type).nunique()).max()
+    if type_consistency == 1:
+        quality_metrics += 1
+        profile["characteristics"].append("Types de données cohérents")
+    
+    # Métrique 3: Balance numérique/catégoriel
+    if 0.3 <= num_cols/total_cols <= 0.7:
+        quality_metrics += 1
+        profile["characteristics"].append("Mix équilibré numérique/catégoriel")
+    
+    # Métrique 4: Taille raisonnable
+    if len(df) > 1000:
+        quality_metrics += 1
+        profile["characteristics"].append("Dataset de taille substantielle")
+    
+    profile["quality_score"] = (quality_metrics / total_metrics) * 100
+    
+    # 4. Questions suggérées basées sur l'analyse
+    if profile["type"] == "numerical":
+        profile["suggested_questions"] = [
+            "Quelles sont les corrélations entre les variables numériques?",
+            "Y a-t-il des outliers significatifs?",
+            "Quelles variables ont le plus d'impact sur la cible?",
+            "Peux-tu proposer des transformations mathématiques utiles?"
+        ]
+    elif profile["type"] == "categorical":
+        profile["suggested_questions"] = [
+            "Quelles sont les catégories dominantes?",
+            "Y a-t-il des déséquilibres dans les classes?",
+            "Comment encoder ces variables pour du machine learning?",
+            "Quelles associations entre catégories?"
+        ]
+    elif profile["type"] == "temporal":
+        profile["suggested_questions"] = [
+            "Y a-t-il des tendances saisonnières?",
+            "Quelle est la fréquence optimale d'analyse?",
+            "Comment traiter les gaps temporels?",
+            "Quelles métriques temporelles calculer?"
+        ]
+    
+    # Questions génériques basées sur le domaine
+    if "financier" in profile["domain_hints"]:
+        profile["suggested_questions"].extend([
+            "Calculer les ROI par segment?",
+            "Détecter les anomalies de prix?",
+            "Quelles tendances financières?"
+        ])
+    
+    # Ajouter des questions génériques
+    profile["suggested_questions"].extend([
+        "Quelles sont les métriques clés à surveiller?",
+        "Comment améliorer la qualité des données?",
+        "Quels insights business puis-je en tirer?"
+    ])
+    
+    return profile
+
+def build_adaptive_prompt(df: pd.DataFrame, user_question: str, profile: dict) -> str:
+    """Construit un prompt intelligent basé sur le type de dataset"""
+    
+    # Contexte optimisé (concis)
+    dataset_context = f"""
+## CONTEXTE DATASET
+- Type: {profile['type']} | Domaines: {', '.join(profile['domain_hints'][:2]) or 'Général'}
+- Shape: {len(df)} lignes × {len(df.columns)} colonnes
+- Types principaux: {', '.join([f'{k}({v})' for k,v in df.dtypes.value_counts().items()][:3])}
+- NA: {df.isna().sum().sum()} ({df.isna().sum().sum()/(len(df)*len(df.columns))*100:.1f}%)
+- Colonnes: {', '.join(df.columns[:5])}{'...' if len(df.columns) > 5 else ''}
+"""
+    
+    # Instructions adaptatives
+    role_instructions = ""
+    if profile["type"] == "numerical":
+        role_instructions = "Tu es un Data Scientist expert en analyse numérique. Concentre-toi sur: statistiques, corrélations, distributions, transformations."
+    elif profile["type"] == "categorical":
+        role_instructions = "Tu es un expert en analyse catégorielle. Concentre-toi sur: fréquences, encodages, associations, déséquilibres."
+    elif profile["type"] == "temporal":
+        role_instructions = "Tu es un expert en séries temporelles. Concentre-toi sur: tendances, saisonnalités, stationnarité, fenêtres temporelles."
+    else:
+        role_instructions = "Tu es un expert en analyse de données. Fournis des insights précis et actionnables."
+    
+    # Prompt final
+    prompt = f"""
+{role_instructions}
+
+{dataset_context}
+
+## QUESTION UTILISATEUR
+{user_question}
+
+## FORMAT DE RÉPONSE
+- **Résumé** (1 phrase)
+- **Analyse technique** (3 points max)
+- **Recommandations** (actions concrètes)
+- **Limitations** (ce que les données ne disent pas)
+
+Réponds en français, sois précis et adapté au type de données.
+"""
+    
+    return prompt
 # ---------------- CORE UTILS ---------------- #
 def memory_opt(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
     before = df.memory_usage(deep=True).sum()
@@ -341,82 +562,230 @@ with tab3:
     st.download_button("💾 Télécharger dataset", data=buf, file_name=f"clean.{fmt}")
 
 # ---------------- RECOS & CHAT INTELLIGENTS ---------------- #
-with tab4:
-    st.header("🤖 Assistant IA – Recommandations & Chat")
+# Remplacer TOUT le contenu de `with tab4:` par :
 
-    # Historique conversation
+with tab4:
+    st.header("🤖 Assistant IA – Intelligence Contextuelle")
+    
+    # Initialisation
     if "chat" not in st.session_state:
         st.session_state.chat = []
-
-    # Contexte dataset réduit
-    def build_context():
-        schema = aft.dtypes.astype(str).to_frame("type").assign(uniques=aft.nunique(), NA=aft.isna().sum())
-        sample = aft.head(5).to_dict(orient="records")
+    
+    # Analyser le dataset une fois
+    if "dataset_profile" not in st.session_state and aft is not None:
+        with st.spinner("🔍 Analyse intelligente du dataset en cours..."):
+            st.session_state.dataset_profile = analyze_dataset_profile(aft)
+    
+    profile = st.session_state.get("dataset_profile", {})
+    
+    # Afficher l'analyse du dataset
+    if profile:
+        with st.expander("Profil détecté du Dataset", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Type", profile["type"].title())
+            with col2:
+                st.metric("Score Qualité", f"{profile['quality_score']:.0f}/100")
+            with col3:
+                domains = ", ".join(profile["domain_hints"][:2]) or "Général"
+                st.metric("Domaines", domains)
+            
+            if profile["characteristics"]:
+                st.caption("**Caractéristiques:**")
+                for char in profile["characteristics"][:3]:
+                    st.write(f"• {char}")
+    
+    # Section 1: Questions suggérées intelligentes
+    st.subheader("💡 Questions suggérées")
+    
+    if profile and profile.get("suggested_questions"):
+        # Organiser en 2 colonnes
+        col1, col2 = st.columns(2)
         
-        # --- NOUVEAU: Statistiques Clés pour Colonnes Numériques ---
-        numeric_cols = aft.select_dtypes(include=np.number).columns
-        key_stats = {}
-        if not numeric_cols.empty:
-            stats_df = aft[numeric_cols].agg(['min', 'max', 'mean', 'std']).T
-            # Arrondir pour un contexte plus propre
-            stats_df = stats_df.apply(lambda x: round(x, 2))
-            key_stats = stats_df.to_dict(orient='index')
-        # --- FIN NOUVEAU ---
-
-        context = f"Schema colonnes :\n{schema.to_string()}\n"
+        questions = profile["suggested_questions"]
+        mid = len(questions) // 2
         
-        if key_stats:
-             context += f"\nStatistiques Clés (Numériques) :\n{json.dumps(key_stats, indent=2, ensure_ascii=False)}\n"
-             
-        context += f"\n5 premières lignes :\n{json.dumps(sample, ensure_ascii=False, indent=2)}"
-        return context
-
-    # --- Boutons rapides ---
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Résumé qualité"):
-            prompt = f"{build_context()}\n\nDonne un résumé global (4 phrases) : qualité, anomalies, conseils."
-            answer = ask_llama(prompt, 350)
-            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
-    with col2:
-        if st.button("🔍 Règles de validation"):
-            col = aft.columns[0]
-            prompt = (f"{build_context()}\n"
-                      f"En te basant sur le contexte ci-dessus, propose 3 règles de validation métier pour la colonne '{col}' (format : règle + raison).")
-            answer = ask_llama(prompt, 350)
-            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
-    with col3:
-        if st.button("💡 Recommandations métier"):
-            prompt = f"{build_context()}\n\nImagine 3 actions concrètes (métier) pour améliorer ce dataset."
-            answer = ask_llama(prompt, 350)
-            st.session_state.chat.append(("bot", answer or "Hors-ligne."))
-
-    st.markdown("---")
-
-    # --- Chat libre ---
-    user_msg = st.text_input("💬 Posez une question sur votre dataset:", placeholder="Ex. : Quelles colonnes ont le plus d'impact sur le target ?")
-    if st.button("📤 Envoyer"):
-        if not user_msg.strip():
-            st.warning("Message vide.")
-        else:
-            with st.spinner("LLM réfléchit..."):
-                context = build_context()
-                prompt = (f"{context}\n\nQuestion utilisateur : {user_msg}\nRéponse concise (max 5 phrases) :")
-                answer = ask_llama(prompt, 400)
-                if not answer:
-                    answer = "Désolé, le service LLM est hors-ligne."
-                st.session_state.chat.append(("user", user_msg))
-                st.session_state.chat.append(("bot", answer))
-
-    # --- Affichage conversation ---
-    st.markdown("---")
-    for author, msg in st.session_state.chat:
-        if author == "user":
-            st.markdown(f'<div style="text-align:right; color:#0d47a1;"><b>Moi :</b> {msg}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div style="text-align:left; color:#388e3c;"><b>IA :</b> {msg}</div>', unsafe_allow_html=True)
-
-    # --- Clear chat ---
-    if st.button("🗑️ Effacer la conversation"):
-        st.session_state.chat = []
-        st.rerun()
+        with col1:
+            for idx, question in enumerate(questions[:mid]):
+                if st.button(f"{question[:50]}...", 
+                           key=f"sugg_{idx}", 
+                           use_container_width=True,
+                           type="secondary"):
+                    with st.spinner("Analyse en cours..."):
+                        # Construire le prompt adaptatif
+                        prompt = build_adaptive_prompt(aft, question, profile)
+                        
+                        # Appel LLM adaptatif
+                        answer = ask_llama(
+                            prompt=prompt,
+                            max_tokens=400,
+                            temperature=0.2,
+                            profile=profile
+                        )
+                        
+                        if answer:
+                            st.session_state.chat.append(("user", question))
+                            st.session_state.chat.append(("bot", answer))
+        
+        with col2:
+            for idx, question in enumerate(questions[mid:], start=mid):
+                if st.button(f"{question[:50]}...", 
+                           key=f"sugg_{idx}", 
+                           use_container_width=True,
+                           type="secondary"):
+                    with st.spinner("Analyse en cours..."):
+                        prompt = build_adaptive_prompt(aft, question, profile)
+                        answer = ask_llama(
+                            prompt=prompt,
+                            max_tokens=400,
+                            temperature=0.2,
+                            profile=profile
+                        )
+                        
+                        if answer:
+                            st.session_state.chat.append(("user", question))
+                            st.session_state.chat.append(("bot", answer))
+    else:
+        # Questions par défaut si pas de profil
+        default_questions = [
+            "Résume la qualité de ce dataset",
+            "Quels problèmes potentiels vois-tu?",
+            "Propose des améliorations de nettoyage"
+        ]
+        
+        cols = st.columns(3)
+        for idx, question in enumerate(default_questions):
+            with cols[idx]:
+                if st.button(question, use_container_width=True, type="secondary"):
+                    with st.spinner("Analyse..."):
+                        answer = ask_llama(question, 350, 0.2)
+                        if answer:
+                            st.session_state.chat.append(("user", question))
+                            st.session_state.chat.append(("bot", answer))
+    
+    st.divider()
+    
+    # Section 2: Chat intelligent principal
+    st.subheader("💬 Conversation avec l'IA")
+    
+    # Input utilisateur
+    user_input = st.text_area(
+        "Posez votre question spécifique:",
+        placeholder="Ex: Comment puis-je améliorer la qualité de ces données pour une analyse ML?",
+        height=100,
+        key="user_input"
+    )
+    
+    # Boutons d'action
+    col_send, col_clear, col_regen = st.columns([2, 1, 1])
+    
+    with col_send:
+        send_disabled = not user_input.strip() or not st.secrets.get("OPENROUTER_KEY")
+        if st.button("Analyser avec IA", 
+                    type="primary", 
+                    use_container_width=True,
+                    disabled=send_disabled):
+            
+            with st.spinner("🔍 Analyse contextuelle en cours..."):
+                # Construire le prompt adaptatif si profil disponible
+                if profile:
+                    prompt = build_adaptive_prompt(aft, user_input, profile)
+                    max_tokens = 450 if len(user_input) > 100 else 350
+                else:
+                    prompt = user_input
+                    max_tokens = 350
+                
+                # Appel LLM
+                response = ask_llama(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=0.2,
+                    profile=profile
+                )
+                
+                # Ajouter à l'historique
+                st.session_state.chat.append(("user", user_input))
+                st.session_state.chat.append(("bot", response or "Désolé, je n'ai pas pu générer de réponse."))
+                
+                st.rerun()
+    
+    with col_clear:
+        if st.button("🗑️ Effacer chat", use_container_width=True):
+            st.session_state.chat = []
+            st.rerun()
+    
+    with col_regen:
+        if st.button("🔄 Re-analyser dataset", use_container_width=True):
+            if aft is not None:
+                with st.spinner("Nouvelle analyse du dataset..."):
+                    st.session_state.dataset_profile = analyze_dataset_profile(aft)
+                st.success("Dataset ré-analysé!")
+                st.rerun()
+    
+    # Section 3: Affichage de l'historique
+    st.divider()
+    
+    if st.session_state.chat:
+        st.subheader("📜 Historique")
+        
+        for i in range(0, len(st.session_state.chat), 2):
+            if i + 1 < len(st.session_state.chat):
+                user_msg = st.session_state.chat[i][1]
+                bot_msg = st.session_state.chat[i + 1][1]
+                
+                # Message utilisateur
+                with st.chat_message("user"):
+                    st.write(user_msg)
+                
+                # Message IA avec contexte
+                with st.chat_message("assistant"):
+                    # Ajouter un badge contextuel si profil disponible
+                    if profile:
+                        badge = f"**🤖 Axiom AI • {profile['type'].title()}**"
+                        st.markdown(badge)
+                        st.markdown("---")
+                    
+                    st.write(bot_msg)
+                    
+                    # Boutons d'action pour chaque réponse
+                    col_copy, col_expand = st.columns([1, 3])
+                    with col_copy:
+                        if st.button("📋", key=f"copy_{i//2}", help="Copier"):
+                            st.code(bot_msg, language=None)
+                    
+        # Bouton pour tout effacer en bas
+        if st.button("🗑️ Effacer toute la conversation", type="secondary"):
+            st.session_state.chat = []
+            st.rerun()
+    else:
+        # État initial - conseils contextuels
+        st.info("**Comment utiliser l'assistant IA intelligent:**")
+        
+        advice_cols = st.columns(2)
+        
+        with advice_cols[0]:
+            st.markdown("""
+            **Pour de meilleurs résultats:**
+            1. Posez des questions spécifiques
+            2. Mentionnez vos objectifs
+            3. Demandez des recommandations concrètes
+            4. Utilisez les questions suggérées
+            """)
+        
+        with advice_cols[1]:
+            if profile:
+                st.markdown(f"""
+                **Contexte détecté:**
+                - Type: **{profile['type'].title()}**
+                - Domaine: **{', '.join(profile['domain_hints'][:2]) or 'Général'}**
+                - Qualité: **{profile['quality_score']:.0f}/100**
+                
+                L'IA adaptera ses réponses à ce contexte.
+                """)
+            else:
+                st.markdown("""
+                **Analyse en cours...**
+                L'IA analysera automatiquement
+                votre dataset pour des réponses
+                plus pertinentes.
+                """)
