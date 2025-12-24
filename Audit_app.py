@@ -432,7 +432,8 @@ with st.sidebar:
 
 # ---------------- CHARGEMENT ---------------- #
 uploaded = st.file_uploader("📂 Sélectionnez votre fichier",
-                            type=["csv","xlsx","json","parquet","txt"], accept_multiple_files=False)
+                            type=["csv", "xlsx", "xls", "json", "parquet", "txt"], 
+                            accept_multiple_files=False)
 if not uploaded:
     st.info("Chargez un fichier pour commencer l'analyse de qualité des données.", icon="💡") # AJOUT 2: Message d'attente pro
     st.stop()
@@ -464,16 +465,25 @@ def load(uploaded):
                 try:
                     df = pd.read_json(buffer, lines=True)
                     return df
-                except Exception:
+             except Exception:
                     # 3️Lecture texte brut → DataFrame à une colonne
                     buffer.seek(0)
                     content = buffer.read().decode("utf-8", errors="ignore")
                     return pd.DataFrame({"texte": [content]})
 
         # --- Autres formats classiques ---
-        elif ext == ".xlsx" or ".xls":
-            return pd.read_excel(buffer)
-        elif ext == ".json":
+       # --- Autres formats classiques ---
+# Correction ici : on vérifie si l'extension est dans une liste autorisée
+            elif ext in [".xlsx", ".xls"]:
+              try:
+        # Note: xlrd est nécessaire pour les fichiers .xls
+               return pd.read_excel(buffer)
+              except Exception as e:
+            log.error(f"Erreur lors de la lecture Excel: {e}")
+        # Tentative de secours si le moteur par défaut échoue
+            return pd.read_excel(buffer, engine='openpyxl' if ext == ".xlsx" else 'xlrd')
+
+            elif ext == ".json":
             return pd.read_json(buffer)
         elif ext == ".parquet":
             return pd.read_parquet(buffer)
