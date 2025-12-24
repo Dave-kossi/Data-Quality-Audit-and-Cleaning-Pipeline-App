@@ -1,5 +1,5 @@
-# packages importation
-import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv, xlrd
+# app.py – DataCleaner Pro++ (LLM édition complète)
+import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv, xlrd, tabulate
 from pathlib import Path
 
 
@@ -49,16 +49,16 @@ def ask_llama(prompt: str, max_tokens: int = 350, temperature: float = 0.2,
         Réponds de manière concise et précise."""
     
     payload = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": 0.1,
-        "frequency_penalty": 0.1
-    }
+    "model": LLM_MODEL,
+    "messages": [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": prompt}
+    ],
+    "max_tokens": 800,    # Augmenté pour éviter les coupures
+    "temperature": 0.1,   # Plus bas pour la précision d'audit
+    "top_p": 0.9,         # Augmenté pour la richesse du vocabulaire métier
+    "frequency_penalty": 0.1
+}
     
     try:
         r = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=45)
@@ -90,165 +90,91 @@ def ask_llama(prompt: str, max_tokens: int = 350, temperature: float = 0.2,
 # Analyse intelligente du dataset
 
 def analyze_dataset_profile(df: pd.DataFrame) -> dict:
-    """Analyse intelligente pour déterminer le type de dataset"""
-    
+    """Analyse intelligente avec capture d'exemples sémantiques"""
     profile = {
         "type": "unknown",
         "characteristics": [],
         "suggested_questions": [],
         "domain_hints": [],
-        "quality_score": 0
+        "quality_score": 0,
+        "semantic_sample": {} # Nouveau : pour stocker des exemples réels
     }
     
-    # 1. Détection du type de dataset
+    # 1. Capture d'échantillons (clés pour le contexte métier)
+    # On prend 3 valeurs uniques représentatives pour les 10 premières colonnes
+    for col in df.columns[:10]:
+        sample_vals = df[col].dropna().unique()[:3].tolist()
+        profile["semantic_sample"][col] = sample_vals
+
+    # 2. Détection du type de dataset (ton code existant optimisé)
     num_cols = len(df.select_dtypes(include=np.number).columns)
-    cat_cols = len(df.select_dtypes(include=['object', 'category']).columns)
-    date_cols = len(df.select_dtypes(include=['datetime']).columns)
     total_cols = len(df.columns)
     
-    if num_cols / total_cols > 0.7:
-        profile["type"] = "numerical"
-        profile["characteristics"].append("Données principalement numériques")
-    elif cat_cols / total_cols > 0.7:
-        profile["type"] = "categorical"
-        profile["characteristics"].append("Données principalement catégorielles")
-    elif date_cols > 0:
-        profile["type"] = "temporal"
-        profile["characteristics"].append("Données temporelles présentes")
-    
-    # 2. Détection de domaine potentiel
-    column_names = [col.lower() for col in df.columns]
-    
-    financial_indicators = ['price', 'cost', 'revenue', 'profit', 'salary', 'amount']
-    customer_indicators = ['customer', 'client', 'user', 'email', 'phone', 'address']
-    product_indicators = ['product', 'sku', 'item', 'category', 'brand']
-    temporal_indicators = ['date', 'time', 'year', 'month', 'day', 'hour']
-    health_indicators = ['patient', 'diagnosis', 'treatment', 'hospital', 'medical']
-    
+    if total_cols > 0:
+        if num_cols / total_cols > 0.7:
+            profile["type"] = "numerical"
+        elif len(df.select_dtypes(include=['object', 'category']).columns) / total_cols > 0.7:
+            profile["type"] = "categorical"
+        elif len(df.select_dtypes(include=['datetime']).columns) > 0:
+            profile["type"] = "temporal"
+
+    # 3. Détection de domaine par mots-clés
+    column_names = " ".join([col.lower() for col in df.columns])
     indicators = [
-        (financial_indicators, "financier"),
-        (customer_indicators, "client/CRM"),
-        (product_indicators, "produit/inventaire"),
-        (temporal_indicators, "temporel/série chronologique"),
-        (health_indicators, "médical/santé")
+        (['price', 'revenue', 'tax', 'amount'], "Finance/Comptabilité"),
+        (['customer', 'client', 'crm', 'email'], "Relation Client (CRM)"),
+        (['sku', 'stock', 'inventory', 'warehouse'], "Logistique/Stock"),
+        (['patient', 'medical', 'diagnosis'], "Santé/Médical"),
+        (['employee', 'salary', 'hr', 'hiring'], "Ressources Humaines")
     ]
     
     for indicator_list, domain in indicators:
-        if any(indicator in ' '.join(column_names) for indicator in indicator_list):
+        if any(ind in column_names for ind in indicator_list):
             profile["domain_hints"].append(domain)
-    
-    # 3. Score de qualité
-    quality_metrics = 0
-    total_metrics = 4
-    
-    # Métrique 1: Taux de valeurs manquantes
-    na_percentage = df.isna().sum().sum() / (len(df) * len(df.columns))
-    if na_percentage < 0.1:
-        quality_metrics += 1
-        profile["characteristics"].append(f"Peu de valeurs manquantes ({na_percentage:.1%})")
-    else:
-        profile["characteristics"].append(f"Valeurs manquantes élevées ({na_percentage:.1%})")
-    
-    # Métrique 2: Cohérence des types
-    type_consistency = df.apply(lambda x: x.map(type).nunique()).max()
-    if type_consistency == 1:
-        quality_metrics += 1
-        profile["characteristics"].append("Types de données cohérents")
-    
-    # Métrique 3: Balance numérique/catégoriel
-    if 0.3 <= num_cols/total_cols <= 0.7:
-        quality_metrics += 1
-        profile["characteristics"].append("Mix équilibré numérique/catégoriel")
-    
-    # Métrique 4: Taille raisonnable
-    if len(df) > 1000:
-        quality_metrics += 1
-        profile["characteristics"].append("Dataset de taille substantielle")
-    
-    profile["quality_score"] = (quality_metrics / total_metrics) * 100
-    
-    # 4. Questions suggérées basées sur l'analyse
-    if profile["type"] == "numerical":
-        profile["suggested_questions"] = [
-            "Quelles sont les corrélations entre les variables numériques?",
-            "Y a-t-il des outliers significatifs?",
-            "Quelles variables ont le plus d'impact sur la cible?",
-            "Peux-tu proposer des transformations mathématiques utiles?"
-        ]
-    elif profile["type"] == "categorical":
-        profile["suggested_questions"] = [
-            "Quelles sont les catégories dominantes?",
-            "Y a-t-il des déséquilibres dans les classes?",
-            "Comment encoder ces variables pour du machine learning?",
-            "Quelles associations entre catégories?"
-        ]
-    elif profile["type"] == "temporal":
-        profile["suggested_questions"] = [
-            "Y a-t-il des tendances saisonnières?",
-            "Quelle est la fréquence optimale d'analyse?",
-            "Comment traiter les gaps temporels?",
-            "Quelles métriques temporelles calculer?"
-        ]
-    
-    # Questions génériques basées sur le domaine
-    if "financier" in profile["domain_hints"]:
-        profile["suggested_questions"].extend([
-            "Calculer les ROI par segment?",
-            "Détecter les anomalies de prix?",
-            "Quelles tendances financières?"
-        ])
-    
-    # Ajouter des questions génériques
-    profile["suggested_questions"].extend([
-        "Quelles sont les métriques clés à surveiller?",
-        "Comment améliorer la qualité des données?",
-        "Quels insights business puis-je en tirer?"
-    ])
+            
+    # Score de qualité simplifié
+    na_rate = df.isna().mean().mean()
+    profile["quality_score"] = int((1 - na_rate) * 100)
     
     return profile
 
-def build_adaptive_prompt(df: pd.DataFrame, user_question: str, profile: dict) -> str:
-    """Construit un prompt intelligent basé sur le type de dataset"""
+def build_adaptive_prompt(df: pd.DataFrame, user_question: str, profile: dict, user_context: str = "") -> str:
+    """Construit un prompt ancré dans le contexte métier"""
     
-    # Contexte optimisé (concis)
-    dataset_context = f"""
-## CONTEXTE DATASET
-- Type: {profile['type']} | Domaines: {', '.join(profile['domain_hints'][:2]) or 'Général'}
-- Shape: {len(df)} lignes × {len(df.columns)} colonnes
-- Types principaux: {', '.join([f'{k}({v})' for k,v in df.dtypes.value_counts().items()][:3])}
-- NA: {df.isna().sum().sum()} ({df.isna().sum().sum()/(len(df)*len(df.columns))*100:.1f}%)
-- Colonnes: {', '.join(df.columns[:5])}{'...' if len(df.columns) > 5 else ''}
-"""
+    # Préparation de la vue sémantique
+    semantic_view = ""
+    for col, examples in profile.get("semantic_sample", {}).items():
+        semantic_view += f"- {col} (exemples: {examples})\n"
     
-    # Instructions adaptatives
-    role_instructions = ""
-    if profile["type"] == "numerical":
-        role_instructions = "Tu es un Data Scientist expert en analyse numérique. Concentre-toi sur: statistiques, corrélations, distributions, transformations."
-    elif profile["type"] == "categorical":
-        role_instructions = "Tu es un expert en analyse catégorielle. Concentre-toi sur: fréquences, encodages, associations, déséquilibres."
-    elif profile["type"] == "temporal":
-        role_instructions = "Tu es un expert en séries temporelles. Concentre-toi sur: tendances, saisonnalités, stationnarité, fenêtres temporelles."
-    else:
-        role_instructions = "Tu es un expert en analyse de données. Fournis des insights précis et actionnables."
+    # Échantillon réel en Markdown (très bien compris par Llama 3)
+    data_preview = df.head(5).to_markdown()
     
-    # Prompt final
+    # Prise en compte du guidage utilisateur si présent
+    context_guide = f"\nINFO SUPPLÉMENTAIRE : L'utilisateur précise que c'est un dataset de type : {user_context}" if user_context else ""
+
     prompt = f"""
-{role_instructions}
+### RÔLE
+Tu es un Expert Senior en Audit et Qualité des Données. Ton objectif est d'analyser le dataset suivant avec une rigueur professionnelle.
 
-{dataset_context}
+### 1. CONTEXTE DU DATASET
+- **Dimensions** : {len(df)} lignes x {len(df.columns)} colonnes
+- **Domaines détectés** : {', '.join(profile['domain_hints']) or 'À déterminer'}
+- **Structure des colonnes** :
+{semantic_view}
+{context_guide}
 
-## QUESTION UTILISATEUR
-{user_question}
+### 2. APERÇU DES DONNÉES (5 PREMIÈRES LIGNES)
+{data_preview}
 
-## FORMAT DE RÉPONSE
-- **Résumé** (1 phrase)
-- **Analyse technique** (3 points max)
-- **Recommandations** (actions concrètes)
-- **Limitations** (ce que les données ne disent pas)
+### 3. MISSION
+D'abord, identifie formellement le **SECTEUR D'ACTIVITÉ** et la **NATURE DES ENREGISTREMENTS** (ex: transactions bancaires, logs serveurs, inventaire retail). 
+Ensuite, réponds à la question de l'utilisateur : "{user_question}"
 
-Réponds en français, sois précis et adapté au type de données.
+### FORMAT DE RÉPONSE IMPÉRATIF
+**[IDENTIFICATION MÉTIER]** : (Ton analyse du secteur et du contexte)
+**[ANALYSE TECHNIQUE]** : (Ta réponse précise basée sur les données)
+**[RECOMMANDATION AUDIT]** : (Un conseil sur la qualité ou la conformité)
 """
-    
     return prompt
 # ---------------- CORE UTILS ---------------- #
 def memory_opt(df: pd.DataFrame) -> tuple[pd.DataFrame, float]:
@@ -432,8 +358,7 @@ with st.sidebar:
 
 # ---------------- CHARGEMENT ---------------- #
 uploaded = st.file_uploader("📂 Sélectionnez votre fichier",
-                            type=["csv", "xlsx", "xls", "json", "parquet", "txt"], 
-                            accept_multiple_files=False)
+                            type=["csv","xlsx","json","parquet","txt"], accept_multiple_files=False)
 if not uploaded:
     st.info("Chargez un fichier pour commencer l'analyse de qualité des données.", icon="💡") # AJOUT 2: Message d'attente pro
     st.stop()
@@ -449,7 +374,7 @@ def load(uploaded):
         # --- Gestion des .csv et .txt ---
         if ext in [".csv", ".txt"]:
             try:
-                # 1. Tentative de lecture tabulaire
+                # 1️ Tentative de lecture tabulaire
                 df = pd.read_csv(
                     buffer,
                     encoding="utf-8",
@@ -460,38 +385,28 @@ def load(uploaded):
                 )
                 return df
             except Exception:
-                # 2. Tentative JSON Lines (si le txt contient du JSON)
+                # 2️Tentative JSON Lines (si le txt contient du JSON)
                 buffer.seek(0)
                 try:
                     df = pd.read_json(buffer, lines=True)
                     return df
                 except Exception:
-                    # 3. Lecture texte brut → DataFrame à une colonne
+                    # 3️Lecture texte brut → DataFrame à une colonne
                     buffer.seek(0)
                     content = buffer.read().decode("utf-8", errors="ignore")
                     return pd.DataFrame({"texte": [content]})
 
-        # --- Autres formats classiques (alignés sur le premier IF) ---
-        elif ext in [".xlsx", ".xls"]:
-            try:
-                # Note: xlrd est nécessaire pour les fichiers .xls
-                return pd.read_excel(buffer)
-            except Exception as e:
-                log.error(f"Erreur lors de la lecture Excel: {e}")
-                # Tentative de secours si le moteur par défaut échoue
-                buffer.seek(0)
-                return pd.read_excel(buffer, engine='openpyxl' if ext == ".xlsx" else 'xlrd')
-
+        # --- Autres formats classiques ---
+        elif ext == ".xlsx":
+            return pd.read_excel(buffer)
         elif ext == ".json":
             return pd.read_json(buffer)
-
         elif ext == ".parquet":
             return pd.read_parquet(buffer)
 
     except Exception as e:
         log.exception("Erreur de chargement du fichier")
         st.error(str(e))
-        
     return None
 
 
