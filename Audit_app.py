@@ -1,5 +1,5 @@
 # packages importation
-import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv
+import streamlit as st, pandas as pd, numpy as np, io, uuid, shutil, os, platform, tempfile, logging, sys, requests, base64, json, csv, xlrd
 from pathlib import Path
 
 
