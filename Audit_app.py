@@ -471,7 +471,7 @@ def load(uploaded):
                     return pd.DataFrame({"texte": [content]})
 
         # --- Autres formats classiques ---
-        elif ext == ".xlsx":
+        elif ext == ".xlsx" or ".xls":
             return pd.read_excel(buffer)
         elif ext == ".json":
             return pd.read_json(buffer)
