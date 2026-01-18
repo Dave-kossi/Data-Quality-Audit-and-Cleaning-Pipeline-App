@@ -9,7 +9,7 @@ TEMP_DIR.mkdir(exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s",
                      handlers=[logging.FileHandler(TEMP_DIR / "app.log"), logging.StreamHandler(sys.stdout)])
 log = logging.getLogger("datacleaner")
-MAX_SIZE    = 500 * 1_000_000  # 500 Mo
+MAX_SIZE    = 500 * 1000000  # 500 Mo
 
 # ---------------- LLM – OPENROUTER ---------------- #
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
