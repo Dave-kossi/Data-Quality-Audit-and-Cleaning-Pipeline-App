@@ -1,175 +1,52 @@
-# 👨‍💻 Kossi Noumagno  
-**Data Analyst | Future Data Scientist | AI Enthusiast**
+# ✨ Axiom • Data Quality & Audit 
 
-![Python](https://img.shields.io/badge/Python-green) 
-![SQL](https://img.shields.io/badge/SQL-blue) 
-![Machine Learning](https://img.shields.io/badge/Machine-Learning-orange) 
-![Data Science](https://img.shields.io/badge/Data-Science-purple)
-![AI](https://img.shields.io/badge/Artificial-Intelligence-red)
+Axiom (anciennement DataCleaner Pro++) est une application Web moderne et intelligente construite avec **Streamlit**. Elle permet d'importer, auditer, optimiser et nettoyer des jeux de données de manière automatisée, tout en intégrant un assistant IA contextuel propulsé par **Llama 3 (via OpenRouter)** pour guider l'utilisateur dans son analyse de données.
 
 ---
 
-## 👋 Profil
+##  Fonctionnalités Clés
 
-Étudiant en **Master Ingénierie Mathématique & Data Science** à l’Université de Haute-Alsace (France), je me spécialise dans l’exploitation des **données** et de l’**intelligence artificielle** pour la **prise de décision stratégique**.
+###  1. Audit & Profiling complet
+*   **Indicateurs instantanés** : Visualisation immédiate des métriques clés (lignes, colonnes, taux de valeurs manquantes, gain mémoire potentiel).
+*   **Rapports Dynamiques** : Génération de rapports de qualité avant/après nettoyage à l'aide de `ydata-profiling` (avec un mode de secours basique intégré en cas d'absence de la dépendance).
 
-Mon approche repose sur un équilibre entre :
-- **rigueur mathématique**,  
-- **ingénierie des données**,  
-- **analyse métier et impact business**.
+###  2. Pipeline de Nettoyage Automatisé & Paramétrable
+*   **Déduplication** : Suppression des lignes doublons en un clic.
+*   **Normalisation** : Passage des noms de colonnes en minuscules, suppression des espaces et remplacement des caractères spéciaux par des underscores (`_`).
+*   **Nettoyage Textuel** : Application automatique de `strip()` et passage en minuscules pour uniformiser les catégories.
+*   **Typage Automatique** : Conversion intelligente des colonnes textuelles en types numériques ou temporels (dates) selon un seuil de validité ajustable.
+*   **Gestion des Valeurs Manquantes (NA)** : Remplacement par la médiane ou le mode pour le numérique, et par une valeur personnalisée (`_MISSING_` par défaut) pour le texte.
+*   **Traitement des Valeurs Aberrantes** : Plafonnement (*capping*) des outliers basé sur la méthode de l'Écart Interquartile (IQR) avec un coefficient ajustable par slider.
+*   **Filtre de Variance** : Suppression optionnelle des colonnes constantes ou quasi-constantes (plus de 99% de valeurs identiques).
 
-🎯 **Objectif professionnel** : concevoir des solutions Data & IA robustes, allant de l’analyse exploratoire à la modélisation prédictive et à l’automatisation intelligente.
+###  3. Optimisation des Performances
+*   **Memory Optimization** : Réduction drastique de l'empreinte RAM en convertissant les types `object` à faible cardinalité en `category` et en effectuant un *downcasting* des types numériques (`int` et `float`).
+*   **Gestion Large Files** : Supporte des fichiers volumineux jusqu'à 500 Mo.
 
-📅 **Disponibilité** : Stage Data Analyst / Data Scientist à partir de **mars 2026**.
-
----
-
-## 🧭 Vision Professionnelle
-
-- Développer des **copilotes IA pour l’analyse de données** en entreprise  
-- Concevoir des outils Data/IA pour la **prise de décision stratégique**  
-- Appliquer la Data Science aux domaines de la **finance**, de l’**e-commerce** et des **banques & assurances**
-
----
-
-## 🛠️ Compétences Techniques
-
-### 📊 Data Science & Machine Learning
-- Python : `pandas`, `numpy`, `scikit-learn`, `matplotlib`, `seaborn`
-- Data cleaning, preprocessing & feature engineering  
-- Modélisation statistique et probabiliste  
-- Recherche opérationnelle  
-- Outils IA : Hugging Face, Gradio, Streamlit  
-
-### 🗄️ Data Engineering & Data Management
-- SQL (PostgreSQL)  
-- BigQuery, Excel, Google Sheets  
-- Audit de qualité des données & pipelines automatisés  
-
-### 📈 Business Intelligence & Visualisation
-- Power BI, Tableau, Plotly, ydata-profiling  
-- Dashboards interactifs & data storytelling  
-
-### 🌐 Développement & Outils
-- HTML, CSS  
-- Git & GitHub  
-- Développement d’outils analytiques en Python  
+###  4. Assistant IA à Intelligence Contextuelle
+*   **Analyse Sémantique** : L'application extrait le profil du dataset (numérique, catégoriel, temporel), détecte le domaine métier (Finance, CRM, RH, Santé, Logistique) et capture des exemples réels.
+*   **Prompts Adaptatifs** : L'IA reçoit un prompt ancré dans le contexte métier exact de vos données sous forme de tableau Markdown.
+*   **Système Multi-Profils** : Le comportement de l'IA (Llama 3.2 3B) s'ajuste dynamiquement (Data Scientist, Expert en analyse catégorielle, Expert en séries temporelles) selon la nature détectée de vos données.
+*   **Questions Suggérées** : Génération automatique de questions pertinentes basées sur l'état du dataset.
 
 ---
 
-## 📂 Projets Sélectionnés
+##  Technologies Utilisées
 
-### 🔹 Analyse Prédictive & Segmentation des Clients Santé  
-👉 **Application Streamlit**  
-https://predictive-analysis-g7zjxrbuf79tfb3aolobma.streamlit.app/
-
-Projet complet de **modélisation prédictive** appliqué au secteur de l’assurance santé.
-
-**Objectif**  
-Analyser, segmenter et prédire le risque médical des clients afin d’optimiser la tarification et la gestion du portefeuille.
-
-**Contributions clés**
-- Analyse exploratoire et visualisation des données clients  
-- Simulation interactive du pricing santé  
-- Modélisation prédictive des dépenses médicales  
-- Segmentation dynamique des profils de risque  
-- Production d’insights business pour améliorer la rentabilité  
-
-**Stack** : Python · Streamlit · Pandas · Scikit-learn · Plotly
+*   **Frontend / UI** : Streamlit
+*   **Traitement de Données** : Pandas, NumPy
+*   **Profiling** : Ydata-profiling (Optionnel / Recommandé)
+*   **Moteur LLM** : OpenRouter API (Modèle : `meta-llama/llama-3.2-3b-instruct`)
 
 ---
 
-### 🔹 Axiom — Audit & Qualité de Données Assisté par IA  
-👉 **Application Streamlit**  
-https://data-quality-audit-and-cleaning-pipeline-btijscehnpfxa8grjj2ui.streamlit.app/
+##  Prérequis & Installation
 
-Application intelligente d’audit, de nettoyage et d’optimisation des données intégrant un **LLM** pour l’analyse contextuelle.
-
-- Audit & data profiling (complétude, unicité, validité)  
-- Nettoyage automatique (doublons, valeurs manquantes, outliers)  
-- Optimisation mémoire et rapports avant/après  
-- Analyse assistée par IA (résumés, anomalies, suggestions métier)  
-- Export multi-formats (CSV, Excel, JSON, Parquet)
-
-**Stack** : Python · pandas · Streamlit · ydata-profiling · LLM (OpenRouter)
-
+### 1. Cloner le projet
+```bash
+git clone [https://github.com/Dave-kossi/axiom-data-quality.git](https://github.com/Dave-kossi/axiom-data-quality.git)
+cd axiom-data-quality
+```
 ---
-
-### 🔹 Analyse Complète du Dataset *Online Retail*  
-👉 **Code GitHub**  
-https://github.com/Dave-kossi/Online_Retail_Project  
-
-👉 **Application Streamlit**  
-https://onlineretailproject-n4u86pch6tfkxqdhtaceco.streamlit.app/
-
-Analyse de plus de **500 000 transactions e-commerce** (UK).
-
-**Résultats clés**
-- Identification des pays à fort potentiel de croissance  
-- Analyse des tendances saisonnières et temporelles  
-- Simulation montrant une **augmentation potentielle du chiffre d’affaires de 7 %**
-
-**Compétences mobilisées**
-Data cleaning avancé · Analyse statistique · Analyse temporelle · Visualisation
-
----
-
-## 💼 Expérience Professionnelle
-
-### 🖥️ Technicien Informatique — CENI Togo  
-**Mai 2024**
-- Installation et configuration de postes Windows  
-- Déploiement de logiciels métiers et protocoles de sauvegarde  
-- Amélioration de la fiabilité opérationnelle des systèmes  
-
-### 🌐 Administrateur Systèmes & Réseaux — International Bâtisseur  
-**Janvier 2022**
-- Déploiement d’un serveur Samba  
-- Gestion des accès utilisateurs et sauvegardes  
-- Contribution à la gouvernance et à la sécurité des données  
-
-### 📊 Technicien Informatique & Formateur — Computer Forever  
-**2022 – 2024**
-- Formation de **+37 apprenants**  
-- Encadrement de **+23 stagiaires**  
-- Pilotage d’un comité d’intervention rapide  
-  - ➜ **–35 % de plaintes clients**
-- Élaboration d’un plan marketing basé sur l’analyse des besoins  
-  - ➜ **+15 % de nouveaux clients**, satisfaction **> 78 %**
-
----
-
-## 📚 Formation
-
-### 🎓 Master Ingénierie Mathématique & Data Science  
-**Université de Haute-Alsace (UHA)** — *2025 – 2026*
-
-### 🎓 Licence Mathématiques Appliquées  
-**Université de Haute-Alsace (UHA)** — *2024 – 2025*
-
-### 🎓 Licence Mathématiques Fondamentales  
-**Université de Lomé** — *2019 – 2023*
-
-### 💻 Formation Professionnelle — Technicien Informatique  
-**Computer Forever – Lomé, Togo** — *2021 – 2022*  
-*Formation suivie en parallèle des études universitaires*
-
----
-
-## 🏆 Certifications
-
-- **Google Data Analytics** — Google (2025)  
-- **IA en Gestion des Risques & Détection de Fraude** — LinkedIn Learning (2024)  
-- **Machine Learning Specialization** — DeepLearning.AI *(en cours)*  
-
----
-
-## 📬 Contact
-
-- 🔗 LinkedIn : https://www.linkedin.com/in/kossi-noumagno  
-- 💻 GitHub : https://github.com/Dave-kossi  
-- 📧 Email : **noumagnokossi0@gmail.com**
-
----
-
-✨ *« Les données racontent une histoire. Mon rôle est de la comprendre, de l’analyser et de la transformer en valeur grâce à l’IA. »*
+### Installation des dépendances
+pip install -r requirements.txt
